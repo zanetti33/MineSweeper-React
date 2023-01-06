@@ -1,182 +1,221 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
+import { useEffect } from 'react';
 
 function Square(props) {
     return (
         <button 
             className="square"
             onClick={props.onClick}
-            id={props.id}
         >
             {props.value}
         </button>
         );
 }
-  
-  class Board extends React.Component {
 
-    renderSquare(i) {
-      return <Square 
-        value={this.props.squares[i]}
-        onClick={() => this.props.onClick(i)}
-        id={this.props.highlight.includes(i) ? "highlightedSquare" : "notHighlightedSquare"}/>;
+function Board(props) {
+
+  const renderSquare = (i) => {
+    return <Square 
+      value={props.displayed[i] ? props.cells[i].number : ""}
+      onClick={() => props.onClick(i)}
+      key={i}
+      />;
+  }
+
+  const rows = [];
+  for (let i=0; i<props.cells.length/props.width; i++) {
+    let squares = [];
+    for (let j=0; j<props.width; j++) {
+      squares.push(renderSquare(i * props.width + j))
     }
-  
-    render() {
-      const rows = [];
-      for (let i=0; i<3; i++) {
-        let squares = []
-        for (let j=0; j<3; j++) {
-          const x = i * 3 + j;
-          squares.push(this.renderSquare(x))
-        }
-        rows.push(
-          <div className="board-row">
-            {squares}
-          </div>)
-      }
-      return (
-        <div>
-          {rows}
-        </div>
-      );
+    rows.push(
+      <div className="board-row" key={i}>
+        {squares}
+      </div>)
+  }
+  return (
+    <div>
+      {rows}
+    </div>
+  );
+}
+
+function Game(props) {
+  const length = props.boardHeight * props.boardWidth;
+  const [displayed, setDisplayed] = useState(new Array(length).fill(false));
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    // check if game is won
+    console.log("checked!");
+    if (isGameWon(displayed, props.boardHeight * props.boardWidth, props.bombs)) {
+      setStatus("You won!");
+    }
+  }, [displayed]);//, props.boardHeight, props.boardWidth, props.bomb]);
+
+  const handleClick = (i) => {
+    let newArray = [...displayed];
+    if (isGameWon(newArray, props.boardHeight * props.boardWidth, props.bombs) 
+      || displayed[i]) {
+      return;
+    } else if (props.cells[i].bomb) {
+      // game lost
+      setStatus("You lost!");
+    } else {
+      // display that cell
+      newArray[i] = true;
+      setDisplayed(newArray);
     }
   }
-  
-  class Game extends React.Component {
 
-    constructor(props) {
-        super(props);
-        this.state = {
-            history: [{
-                squares: Array(9).fill(null),
-            }],
-            ascending: true,
-            stepNumber: 0,
-            xTurn: true,
+  return (
+    <div className="game-board">
+      {status && <h1>{status}</h1>}
+        <Board 
+            cells={props.cells}
+            onClick={i => handleClick(i)}
+            displayed={displayed}
+            width={props.boardWidth}
+        />
+    </div>
+  );
+}
+
+function Home() {
+  const [gameStarted, setGameStarted] = useState(false);
+  const [error, setError] = useState('');
+  const [cells, setCells] = useState([]);
+  const [gameOptions, setGameOptions] = useState({
+    boardHeight: 0,
+    boardWidth: 0,
+    bombs: 0,
+  });
+
+  const handleChange = (event) => {
+    setGameOptions({ ...gameOptions, [event.target.name]: event.target.value });
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    console.log(gameOptions);
+    if (gameOptions.boardHeight < 1 || gameOptions.boardWidth < 1) {
+      setError("The board height and width must be at least 1 each!");
+    } else if (gameOptions.boardHeight * gameOptions.boardWidth < gameOptions.bombs) {
+      setError("Too many bombs for this board!");
+    } else {
+      setGameStarted(true);
+      setCells(generateCells(gameOptions.bombs, gameOptions.boardHeight, gameOptions.boardWidth))
+    }
+  };
+
+  if (gameStarted) {
+    return <Game 
+      boardHeight={gameOptions.boardHeight}
+      boardWidth={gameOptions.boardWidth}
+      bombs={gameOptions.bombs}
+      cells={cells}
+    />;
+  } else {
+    return (
+      <div className="menu">
+        {error && 
+          <div className="menu-error">
+            {error}
+          </div>
         }
-    }
-
-    handleClick(i) {
-        const history = this.state.history.slice(0, this.state.stepNumber + 1)
-        const current_squares = history[history.length - 1].squares.slice()
-        if (calculateWinner(current_squares) || current_squares[i]) {
-            return;
-        }
-        current_squares[i] = this.state.xTurn ? 'X' : 'O';
-        this.setState({
-            history: history.concat([
-                {
-                  squares: current_squares
-                }
-              ]),
-            stepNumber: history.length,
-            xTurn: !this.state.xTurn,
-        })
-    }
-
-    render() {
-        const history = this.state.history;
-        const current_squares = history[this.state.stepNumber].squares;
-        const winner_squares = calculateWinner(current_squares);
-
-        const moves = history.map((step, move) => {
-            let last_move = "";
-            if (move) {
-              let i = 0;
-              while (i < 9 && step.squares[i] === history[move-1].squares[i])
-                i++;
-              last_move = iToCoords(i);
-            }
-            return (
-                <li key={move}>
-                    <button onClick={() => this.jumpTo(move)} className={this.isSelected(move)}>
-                        {move ? 
-                            'Go to move #' + move + ": " + last_move : 
-                            'Go to game start'}
-                    </button>
-                </li>
-            );
-        })
-
-        let status;
-        if (winner_squares) {
-          status = current_squares[winner_squares[0]] + ' has won!';
-        } else if (this.state.stepNumber === 9) {
-          status = 'The game ended in a draw';
-        } else {
-          status = 'Next player: ' + (this.state.xTurn ? 'X' : 'O');
-        }
-        return (
-            <div className="game">
-            <div className="game-board">
-                <Board 
-                    squares={current_squares}
-                    onClick={i => this.handleClick(i)}
-                    highlight={winner_squares ? winner_squares : []}
-                />
-            </div>
-            <div className="game-info">
-                <div>{status}</div>
-                <ol>{this.state.ascending ? moves : moves.reverse()}</ol>
-                <div>
-                  <button onClick={() => this.invertOrder()}>
-                    Invert the order of the move list
-                  </button>
-                </div>
-            </div>
-            </div>
-        );
-    }
-
-    jumpTo(step) {
-        this.setState({
-            stepNumber: step,
-            xTurn: (step % 2) === 0,
-        })
-    }
-
-    isSelected(step) {
-      if (step === this.state.stepNumber)
-        return "selectedButton";
-      return "notSelectedButton";
-    }
-
-    invertOrder() {
-      this.setState({
-        ascending: !this.state.ascending,
-      });
-    }
+        <form onSubmit={handleSubmit}>
+          <label>
+            Altezza:
+            <input type="number" name="boardHeight" value={gameOptions.boardHeight} onChange={handleChange}/>
+          </label>
+          <label>
+            Larghezza:
+            <input type="number" name="boardWidth" value={gameOptions.boardWidth} onChange={handleChange}/>
+          </label>
+          <label>
+            Bombe:
+            <input type="number" name="bombs" value={gameOptions.bombs} onChange={handleChange}/>
+          </label>
+          <input type="submit" value="start"/>
+        </form>
+      </div>
+    );
   }
-  
+}
+
+
+
   // ========================================
   
   const root = ReactDOM.createRoot(document.getElementById("root"));
-  root.render(<Game />);
+  root.render(<Home />);
   
-  function calculateWinner(squares) {
-    const lines = [
-      [0, 1, 2],
-      [3, 4, 5],
-      [6, 7, 8],
-      [0, 3, 6],
-      [1, 4, 7],
-      [2, 5, 8],
-      [0, 4, 8],
-      [2, 4, 6],
-    ];
-    for (let i = 0; i < lines.length; i++) {
-      const [a, b, c] = lines[i];
-      if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
-        return [a, b, c];
+  function isGameWon(displayedCells, n, bombs) {
+    let cellOpened = 0;
+    for (let i=0; i<n; i++) {
+      if (displayedCells[i]) {
+        cellOpened++;
       }
     }
-    return null;
+    console.log(cellOpened, n, bombs, cellOpened >= (n - bombs));
+    return cellOpened >= n - bombs;
   }
 
-  function iToCoords(i) {
-    const col = (i % 3) + 1;
-    const row = (Math.floor(i / 3)) + 1;
-    return "(col:" + col + ", row:" + row + ")";
+  function generateCells(k, h, w) {
+    // generate all indexes from 0 to n-1
+    const indexes = [];
+    let i, tmp, j, x, n=h*w;
+    for (i=0; i<n; i++) {
+      indexes.push(i);
+    }
+    i = n;
+    j = k;
+    // shift k random indexes to the end of the array
+    while (j > 0) {
+      x = Math.floor(Math.random() * i);
+      tmp = indexes[i-1];
+      indexes[i-1] = indexes[x];
+      indexes[x] = tmp;
+      i--;
+      j--;
+    }
+    // create n cells
+    const cells = new Array(n).fill().map(u => ({
+      bomb: false,
+      number: 0
+    }));
+    // mark the selected indexes as bombs
+    while (k > 0) {
+      x = indexes.pop();
+      cells[x].bomb = true;
+      k--;
+    }
+    console.log(cells);
+    // write the number in the cells
+    for (i=0; i<n; i++) {
+      // write the number only if it isn't a bomb
+      if (!cells[i].bomb) {
+        let adj_indexes = [];
+        let r_i = Math.floor(i / w), c_i = i % w;
+        for (let r = r_i - 1; r <= r_i + 1; r++) {
+          for (let c = c_i - 1; c <= c_i + 1; c++) {
+            if (r >= 0 && r < h &&
+              c >= 0 && c < w) {
+                adj_indexes.push(r * w + c);
+              }
+          }
+        }
+        // count the bombs
+        x = 0;
+        console.log(adj_indexes);
+        adj_indexes.forEach(element => {
+          if (cells[element].bomb)
+            x++;
+        });
+        cells[i].number = x;
+      }
+    }
+    return cells;
   }
